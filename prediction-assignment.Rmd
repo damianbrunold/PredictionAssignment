@@ -1,0 +1,120 @@
+---
+title: "Prediction Assignment"
+author: "Damian Brunold"
+output: html_document
+---
+
+The dataset contains data collected from activity trackers while the test
+persons were performing certain exercise tasks. They were told to perform the
+exercises in five different ways. Our task ist to build a predictive model for
+predicting which of the five ways of performing the exercises was used.
+
+```{r}
+library(caret)
+data <- read.csv("pml-training.csv")
+dim(data)
+```
+
+The outcome is stored in the classe variable.
+
+```{r}
+table(data$classe)
+```
+
+One observation looks like this:
+
+```{r}
+head(data, n = 1)
+```
+
+As most features are empty for most users, we restrict ourselves to the roll, pitch
+and yaw features for each of forearm, dumbbell, arm and belt.
+
+```{r}
+features <- names(data)[grepl("^(roll|pitch|yaw)_(forearm|dumbbell|arm|belt)$", names(data))]
+```
+
+We split the data into training and testing with 70% of observations used for
+training and 30% for validation.
+
+```{r}
+set.seed(1234)
+inTrain <- sample(nrow(data), floor(nrow(data) * 0.7))
+training <- data[inTrain,c("classe", features)]
+testing <- data[-inTrain,c("classe", features)]
+```
+
+As we have a classification task, I try three different classification
+models and check the performance of each one using the testing dataset.
+I chose random forests, linear discriminant analysis and boosted logistic
+regression.
+
+```{r cache=TRUE}
+model1 <- train(classe ~ ., training, method = "rf")
+model2 <- train(classe ~ ., training, method = "lda")
+model3 <- train(classe ~ ., training, method = "LogitBoost")
+```
+
+Using these models, lets predict the values for the testing set.
+
+```{r}
+pred1 <- predict(model1, newdata = testing)
+pred2 <- predict(model2, newdata = testing)
+pred3 <- predict(model3, newdata = testing)
+```
+
+Performance of random forest model:
+
+```{r}
+confusionMatrix(pred1, testing$classe)
+```
+
+The random forest model has impressive accuracy.
+Overall it is 0.986 and the 95% CI is (0.9827, 0.9889).
+Three of the five classes even reach accuracy above
+0.99.
+
+Performance of linear discriminant analysis model:
+
+```{r}
+confusionMatrix(pred2, testing$classe)
+```
+
+The LDA  model does not fare well. The overall accuracy is
+only 0.435.
+
+Performance of boosted logistical regression model:
+
+```{r}
+confusionMatrix(pred3, testing$classe)
+```
+
+With an accurace of 0.85, the boosted logistical regression
+model is the second best model. Still, the random forest model
+is way better.
+
+We choose the best model based on random forests with accuracy
+of 0.98 on the test data. As the model was trained without using
+the test data, I expect the general out of sample error to be
+2%.
+
+```{r}
+best.model <- model1
+```
+
+Lets have a look at the variable importance:
+
+```{r}
+plot(varImp(model1))
+```
+
+Except for pitch_arm, all features have a reasonably high importance.
+
+Now we can load and predict the actual test cases:
+
+```{r}
+pred.data <- read.csv("pml-testing.csv")
+pred.data <- pred.data[,features]
+prediction <- predict(best.model, newdata = pred.data)
+prediction
+```
